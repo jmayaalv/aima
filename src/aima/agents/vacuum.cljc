@@ -35,24 +35,26 @@
 
 (defrecord VacuumEnvironment [agent world position]
   Environment
-  #_(add-agent! [env new-agent]
-    (update env :agents conj new-agent))
-
-  #_(remove-agent [env agent]
-    (update env :agents (fn [env]
-                          (remove #(= agent %) env))))
   (perceive [env sensor-fn]
     (sensor-fn env))
 
   (actuate [env action]
     (execute env action))
 
-
   (step [env]
     (let [percepts (env/perceive env sensor-fn)
           agent (:agent env)
           action (env/execute agent percepts)]
-      (env/actuate env action))))
+      (env/actuate env action)))
+
+  (run [env]
+    (cond-> env
+      (not (env/done? env)) env/step
+      (not (env/done? env)) env/run))
+
+  (done? [env]
+    (not
+     (some #(= % :dirty) (:world env)))))
 
 (defn make-vacuum-env [agents world]
   (map->VacuumEnvironment {:agent (or agents [])
