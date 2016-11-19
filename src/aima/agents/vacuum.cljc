@@ -22,20 +22,29 @@
                     action))
 
 (defmethod execute :left [env _]
-  (assoc env :position :left))
+  (print "move left")
+  (-> env
+   (assoc :position :left)
+   (update :performance (fnil dec 0))))
 
 (defmethod execute :right [env _]
-  (assoc env :position :right))
+  (print "move right")
+  (-> env
+   (assoc :position :right)
+   (update :performance (fnil dec 0))))
 
 (defmethod execute :clean [env _]
-  (update-in env [:world (get location (:position env))] :clean))
+  (print "clean")
+  (-> env
+   (update-in [:world (get location (:position env))] :clean)
+   (update :performance (fnil (partial + 10) 0))))
 
 (defn sensor-fn [{:keys [position world] :as env}]
   [position (nth world (get location position))])
 
 (defrecord VacuumEnvironment [agent world position]
   Environment
-  (perceive [env sensor-fn]
+  (perceive [env senso-fn]
     (sensor-fn env))
 
   (actuate [env action]
@@ -56,7 +65,7 @@
     (not
      (some #(= % :dirty) (:world env)))))
 
-(defn make-vacuum-env [agents world]
-  (map->VacuumEnvironment {:agent (or agents [])
-                           :world (or world [])
-                           :position :left}))
+(defn make-vacuum-env [agent world position]
+  (map->VacuumEnvironment {:agent agent
+                           :world world
+                           :position (or position :left)}))

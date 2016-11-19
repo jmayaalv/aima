@@ -7,6 +7,5 @@
 (defprotocol Environment
   (perceive [env sensor-fn])
   (actuate [env action])
-  (step [env])
-  (run [env])
+  (step [env])  (run [env])
   (done? [env]))
