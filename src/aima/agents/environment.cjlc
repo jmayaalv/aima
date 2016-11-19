@@ -1,0 +1,13 @@
+(ns aima.agents.environment)
+
+
+(defprotocol Agent
+  (execute [agent percept]))
+
+(defprotocol Environment
+  #_(add-agent! [env agent])
+  #_(remove-agent [env agent])
+  (perceive [env sensor-fn])
+  (actuate [env action])
+  (step [env])
+  #_(done?))
