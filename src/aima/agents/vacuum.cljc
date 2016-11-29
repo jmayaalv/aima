@@ -1,71 +1,120 @@
 (ns aima.agents.vacuum
-  (:require [aima.agents.environment :as env :refer [Environment Agent]]))
+  (:require [aima.agents.environment :as env :refer [Environment Agent Sensor]]
+            [clojure.pprint :as pprint]))
 
+;;; Private
+(defn cell [{:keys [world] :as env} location]
+  (get-in world (flatten [location])))
 
-;; Actions: :left :right :clean
+(defn agent-location [{:keys [world] :as env} {:keys [id]}]
+  (let [location (some (fn [cell]
+                         (let [agents (:agents cell)]
+                           (when (some #{id} agents)
+                             (:location cell))))
+                       world)]
+    (if (seq? location)
+      location
+      [location])))
 
-;; World is an array of n elements. possible values of the array, :dirty :clean
+;;; Sensors
 
-(defrecord SimpleVacuumAgent []
+(defrecord LocationSensor []
+  Sensor
+  (sense [sensor agent env]
+    (agent-location env agent)))
+
+(defrecord DirtSensor []
+  Sensor
+  (sense [sensor agent env]
+    (let [location (agent-location env agent)
+          cell (cell env location)]
+      (when (:dirt cell)
+        :dirty))))
+
+;;; Actuators
+
+(defn move-agent [agent env new-location]
+  (let [location (env/location agent)
+        agent-id (:id agent)]
+    (-> env
+        (update-in (vec (flatten [:world location :agents])) (fn [agents]
+                                                               (remove #(= % agent-id)
+                                                                       agents)))
+        (update-in (vec (flatten [:world new-location :agents])) conj agent-id)
+        )))
+
+(defmethod env/actuate :suck [_ agent  env]
+  (let [location (env/location agent)]
+    (update-in env (vec (flatten [:world location])) assoc :dirt false)))
+
+(defmethod env/actuate :left [_ agent  env]
+  (let [location (env/location agent)
+        move-to (update location 0 dec)]
+    (move-agent agent env move-to)))
+
+(defmethod env/actuate :right [_ agent  env]
+  (let [location (env/location agent)
+        move-to (update location 0 inc)]
+    (move-agent agent env move-to)))
+
+;;; Agent
+
+(defrecord VacuumAgent [id sensors agent-fn]
   Agent
-  (execute [agent [pos status]]
-    (if (= :dirty status)
-        :clean
-        (if (= pos :left)
-          :right
-          :left))))
+  (location [agent]
+    (let [[location _] (last (:percept-sequence agent))]
+      location))
 
-(def location {:left 0
-               :right 1})
+  (execute [agent env]
+    (let [percepts (for [sensor (:sensors agent)]
+                     (env/sense sensor agent env))
+          agent (update agent :percept-sequence conj percepts)
+          action (agent-fn percepts)]
+      (pprint/pprint action)
+      (env/actuate action agent env))))
 
-(defmulti execute (fn [env action]
-                    action))
+(defn make-vacumm-agent [id fn]
+  (->VacuumAgent id [(->LocationSensor) (->DirtSensor)] fn))
 
-(defmethod execute :left [env _]
-  (print "move left")
-  (-> env
-   (assoc :position :left)
-   (update :performance (fnil dec 0))))
+(defn simple-agent-fn [[location dirt?]]
 
-(defmethod execute :right [env _]
-  (print "move right")
-  (-> env
-   (assoc :position :right)
-   (update :performance (fnil dec 0))))
+  (cond
+    dirt? :suck
+    (= 0 (first location)) :right
+    (= 1 (first location)) :left
+    :else :no-op))
 
-(defmethod execute :clean [env _]
-  (print "clean")
-  (-> env
-   (update-in [:world (get location (:position env))] :clean)
-   (update :performance (fnil (partial + 10) 0))))
+;;; Environemnt
 
-(defn sensor-fn [{:keys [position world] :as env}]
-  [position (nth world (get location position))])
+(defn step [env agent]
+  (env/execute agent env))
 
-(defrecord VacuumEnvironment [agent world position]
+(defrecord SimpleEnvironment [agents world]
   Environment
-  (perceive [env senso-fn]
-    (sensor-fn env))
+  (done? [{:keys [world] :as env}]
+    (not (some #(:dirt %)
+               world)))
 
-  (actuate [env action]
-    (execute env action))
+  (step [{:keys [agents] :as env}]
+    (last (for [agent agents]
+       (step env agent)))) ;; There is a problem when there are multiple agents
 
-  (step [env]
-    (let [percepts (env/perceive env sensor-fn)
-          agent (:agent env)
-          action (env/execute agent percepts)]
-      (env/actuate env action)))
+  (run [{:keys [agents world] :as env}]
+    (if (env/done? env)
+      env
+      (-> (env/step env)
+          env/run))))
 
-  (run [env]
-    (cond-> env
-      (not (env/done? env)) env/step
-      (not (env/done? env)) env/run))
+(defn make-environment [agents world]
+  (->SimpleEnvironment agents world))
 
-  (done? [env]
-    (not
-     (some #(= % :dirty) (:world env)))))
+(def simple-world
+  [{:dirt false
+    :agents [:vacuum1]
+    :location 0}
+   {:dirt true
 
-(defn make-vacuum-env [agent world position]
-  (map->VacuumEnvironment {:agent agent
-                           :world world
-                           :position (or position :left)}))
+    :location 1}])
+
+(defn make-simple-environment []
+  (make-environment [(make-vacumm-agent :vacuum1 simple-agent-fn)] simple-world))
