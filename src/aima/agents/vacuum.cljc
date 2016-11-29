@@ -45,7 +45,9 @@
 
 (defmethod env/actuate :suck [_ agent  env]
   (let [location (env/location agent)]
-    (update-in env (flatten [:world location]) assoc :dirt false)))
+    (-> env
+        (update-in (flatten [:world location]) assoc :dirt false)
+        (update-in [:performance (:id agent)] (fnil + 0) 10))))
 
 (defmethod env/actuate :left [_ agent  env]
   (let [location (env/location agent)
@@ -112,9 +114,10 @@
 
 (def simple-world
   [{:dirt false
-    :agents [:vacuum1 :vacuum2]
+    :agents [:vacuum1]
     :location 0}
    {:dirt true
+    :agents [:vacuum2]
     :location 1}])
 
 (defn make-simple-environment []
