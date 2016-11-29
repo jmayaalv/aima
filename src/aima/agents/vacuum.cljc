@@ -37,15 +37,15 @@
   (let [location (env/location agent)
         agent-id (:id agent)]
     (-> env
-        (update-in (vec (flatten [:world location :agents])) (fn [agents]
+        (update-in (flatten [:world location :agents]) (fn [agents]
                                                                (remove #(= % agent-id)
                                                                        agents)))
-        (update-in (vec (flatten [:world new-location :agents])) conj agent-id)
-        )))
+        (update-in (flatten [:world new-location :agents]) conj agent-id)
+        (update-in [:performance agent-id] (fnil inc 0)))))
 
 (defmethod env/actuate :suck [_ agent  env]
   (let [location (env/location agent)]
-    (update-in env (vec (flatten [:world location])) assoc :dirt false)))
+    (update-in env (flatten [:world location]) assoc :dirt false)))
 
 (defmethod env/actuate :left [_ agent  env]
   (let [location (env/location agent)
@@ -70,7 +70,6 @@
                      (env/sense sensor agent env))
           agent (update agent :percept-sequence conj percepts)
           action (agent-fn percepts)]
-      (pprint/pprint action)
       (env/actuate action agent env))))
 
 (defn make-vacumm-agent [id fn]
@@ -86,8 +85,7 @@
 
 ;;; Environemnt
 
-(defn step [env agent]
-  (env/execute agent env))
+
 
 (defrecord SimpleEnvironment [agents world]
   Environment
@@ -95,26 +93,30 @@
     (not (some #(:dirt %)
                world)))
 
-  (step [{:keys [agents] :as env}]
-    (last (for [agent agents]
-       (step env agent)))) ;; There is a problem when there are multiple agents
 
-  (run [{:keys [agents world] :as env}]
+  (run [{:keys [agents] :as env}]
+    (reduce (fn [res {:keys [performance]}]
+              (conj res performance))
+            {}
+            (for [agent agents]
+              (env/run env agent))))
+
+  (run [env agent]
     (if (env/done? env)
       env
-      (-> (env/step env)
-          env/run))))
+      (-> (env/execute agent env)
+          (env/run agent)))))
 
 (defn make-environment [agents world]
   (->SimpleEnvironment agents world))
 
 (def simple-world
   [{:dirt false
-    :agents [:vacuum1]
+    :agents [:vacuum1 :vacuum2]
     :location 0}
    {:dirt true
-
     :location 1}])
 
 (defn make-simple-environment []
-  (make-environment [(make-vacumm-agent :vacuum1 simple-agent-fn)] simple-world))
+  (make-environment [(make-vacumm-agent :vacuum1 simple-agent-fn)
+                     (make-vacumm-agent :vacuum2 simple-agent-fn)] simple-world))

@@ -11,6 +11,5 @@
   (execute [agent env]))
 
 (defprotocol Environment
-  (run [env])
-  (step [env])
+  (run [env] [env agent])
   (done? [env]))
